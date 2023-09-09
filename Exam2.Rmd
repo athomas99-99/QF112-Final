@@ -1,0 +1,231 @@
+---
+title: "Exam2"
+author: "Andrew Thomas"
+date: "2023-04-27"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Names: Andrew Thomas and Sai Gogineni
+(Received help Joshua Ronai and William Parente)
+We pledge our honor that we have abided by the Stevens Honor System
+
+```{r}
+library("quantmod")
+
+getSymbols("PYPL", src="yahoo", from="2023-01-20", to="2023-04-20")
+getSymbols("F", src="yahoo", from="2023-01-20", to="2023-04-20")
+getSymbols("MCD", src="yahoo", from="2023-01-20", to="2023-04-20")
+getSymbols("SONY", src="yahoo", from="2023-01-20", to="2023-04-20")
+getSymbols("BABA", src="yahoo", from="2023-01-20", to="2023-04-20")
+getSymbols("ATAT", src="yahoo", from="2023-01-20", to="2023-04-20")
+
+PYPL.P <- c(PYPL$PYPL.Adjusted)
+FORD.P <- c(F$F.Adjusted)
+MCD.P <- c(MCD$MCD.Adjusted)
+SONY.P <- c(SONY$SONY.Adjusted)
+BABA.P <- c(BABA$BABA.Adjusted)
+ATAT.P <- c(ATAT$ATAT.Adjusted)
+
+#data for first two months 
+
+PYPL.P2 <- c(PYPL$PYPL.Adjusted[1:42])
+FORD.P2 <- c(F$F.Adjusted[1:42])
+MCD.P2 <- c(MCD$MCD.Adjusted[1:42])
+SONY.P2 <- c(SONY$SONY.Adjusted[1:42])
+BABA.P2 <- c(BABA$BABA.Adjusted[1:42])
+ATAT.P2 <- c(ATAT$ATAT.Adjusted[1:42])
+
+PYPL.P3 <- c(PYPL$PYPL.Adjusted[43:62])
+FORD.P3 <- c(F$F.Adjusted[43:62])
+MCD.P3 <- c(MCD$MCD.Adjusted[43:62])
+SONY.P3 <- c(SONY$SONY.Adjusted[43:62])
+BABA.P3 <- c(BABA$BABA.Adjusted[43:62])
+ATAT.P3 <- c(ATAT$ATAT.Adjusted[43:62])
+```
+
+```{r}
+#1
+library("MASS")
+
+multiple_regression <- function(x, y){
+
+  x <- cbind(1, as.matrix(x))
+  y <- as.matrix(y)
+
+
+  betas <- (ginv(t(x) %*% x)) %*% t(x) %*% y
+
+  residuals <- y - x %*% betas
+
+ 
+  RSE <- sqrt(sum(residuals^2) / (length(y) - ncol(x)))
+  SE_betas <- RSE * sqrt(diag(ginv(t(x) %*% x)))
+
+  t_values <- betas / SE_betas
+  p_values <- 2*pt(abs(t_values), df = length(y) - ncol(x), lower.tail = FALSE)
+
+  n <- length(y)
+  p <- ncol(x)
+  RSS <- sum(residuals^2)
+  TSS <- sum((y - mean(y))^2)
+  adj_RSQ <- 1-(RSS/(n-p))/(TSS/(n-1))
+
+  results <- list("Coefficients" = betas, "Std. Errors" = SE_betas, "T-Values" = t_values, "P-Values" = p_values, "Adjusted   R-Squared" = adj_RSQ)
+  return(results)
+}
+# The multiple regressions function analyzes the relationship between our
+#response variable and various predictor/independent variables and creates
+#line of best fit. The coefficients are found by utilizing matrix
+#multiplication and matrix tranpose. We first used matrices and their
+#properties to calculate our beta value so we could get our residuals. To
+#take inverses, we utilized the ginv function because that make any matrix
+#invertible, which the solve function fails to do and allows us to derive
+#unique solution for the coefficients and reduce multicollinearity. We then
+#used our residuals to calculate our Residual Standard Error (RSE), which
+#helped us calculate our standard error (SE). We needed this standard error
+#calculation to use in our calculation for the t-statistic and subsequently
+#our p-value. By calculating the absolute value of our p-value, we can set
+#the lower tail equal to false and only account for positive p-values.
+#P-values give information regarding the relationship of the linear model
+#and determines whether our predictors actually have an impact on the
+#response variable. Afterwards, by using the formula for RSS and TSS, as
+#well as our sample size and predictors we can create an adjusted r-squared
+#value for the regression model. This will be very useful for finding the
+#best model using forward subset selection in the next part. In the end, we
+#return the results using a list and we labeled each of the statistics used
+#so that it came out organized.  
+
+multiple_regression(cbind(FORD.P,MCD.P,SONY.P,BABA.P,ATAT.P),PYPL.P)
+```
+
+```{r}
+#2
+
+# We are choosing forward subset selection with adjusted R-squared as our
+# method for determining the best model
+
+#3
+forward_subset <- function(x, y) {
+  num_predictors <- ncol(x)
+  i <- 1 
+  chosen_predictors <- c()
+  cut_off <- 0
+  highest_rsq <- 0
+  pred_names <- colnames(x)
+
+  models <- list() 
+
+  while (i <= num_predictors) {
+  remaining_predictors <- setdiff(pred_names, chosen_predictors)
+  rsq <- rep(0, length(remaining_predictors))
+
+  for (j in 1:length(remaining_predictors)) {
+    predictors <- c(chosen_predictors, remaining_predictors[j])
+    model <- multiple_regression(x[,predictors], y)
+    rsq[j] <- model$`Adjusted   R-Squared`
+    models[[toString(predictors)]] <- model 
+
+  }
+
+  best_predictor <- which.max(rsq)
+  chosen_predictors <- c(chosen_predictors, remaining_predictors[best_predictor])
+
+  if (rsq[best_predictor] < highest_rsq) {
+    cut_off <- length(chosen_predictors)-1
+    break
+  } else {
+    highest_rsq <- rsq[best_predictor]
+    cut_off <- length(chosen_predictors)
+    i <- i + 1
+  }
+}
+  features <- chosen_predictors[1:cut_off]
+  best_model <- models[[toString(features)]]
+
+  for (preds in names(models)) {
+    model <- models[[preds]]
+    cat("Predictors: ", preds, "\n")
+    cat("Adjusted R-Squared: ", model$`Adjusted   R-Squared`, "\n")
+  }
+  
+  best_model[["Best Features"]] = features
+
+  return(best_model)
+}
+# Our forward subset functions takes in two inputs, our independent
+#variables and our response, and returns the best adjusted R-squared value
+#for our five stocks for the past two months. First, we initialize the
+#parameters that we will use in this function. num_predictors counts the
+#number of predictors that are in our x variable, chosen_predictors are the
+#predictors which after being iterated through the while loop will yield the
+#highest r-squared value, and cut_off keeps track of how many predictors are
+#going to be in our "best_model". We initialize highest_rsq to 0 so that
+#when the first adjusted r-square is calculated in the loop it is greater
+#than 0 and is greater than the previous value, and pred_names gives us the
+#name of our predictors. The while loop does stepwise regression where we
+#add one predictor to the model at a time and it runs the loop until the
+#r-squared value doesn't improve anymore. The setdiff function gets the
+#predictors that haven't selected yet and if the r-squared value improves
+#from a previous iteration, then highest_rsq and cut_off get adjusted
+#accordingly. The while loop also stores each model which will printed out
+#in the end. The if statement starting with if(rsq[best_predictor]
+#highest_rsq) compares the r-squared value for the best predictor with the
+#previous highest adjusted r-squared, and this serves the purpose of
+#determining whether adding more predictors actually improves the fit or
+#not. Features takes the stocks with the best adjusted r-squared values and
+#optimal number of predictors. Lastly, the for loop in the end of the
+#function prints different combination of predictors with their respective
+#adjusted r-squared values. The function returns the predictors used in the
+#best model and the adjusted r-squared value for that model.
+
+MSE <- function(X,Y,beta){
+  x <- cbind(1, as.matrix(X))
+  y <- as.matrix(Y)
+  
+  beta <- as.matrix(beta)
+  yhat <- x %*% beta
+  error <- (y-yhat)^2
+  return (mean(error))
+}
+# The Mean-Squared Error function is designed to return the mean squared
+#error for the last month of our interval. We initialize x and y as a matrix
+#to obtain the predictors and response variables in matrix form. We then
+#initialize our beta, which are our regression coefficients. We then
+#multiply our predictors and beta to obtain the predicted y value, which is
+#then used along with our actual y values to obtain our error, which can
+#then be made into mean standard error by taking the mean of it.
+
+a <- forward_subset(cbind(FORD.P2,MCD.P2,SONY.P2,BABA.P2,ATAT.P2), PYPL.P2)
+a
+MSE(cbind(FORD.P3,MCD.P3,SONY.P3,BABA.P3,ATAT.P3)[,a$`Best Features`], PYPL.P3,a$Coefficients)
+
+#4
+b <- forward_subset(cbind(FORD.P2, MCD.P2, SONY.P2, BABA.P2, ATAT.P2,FORD.P2^2, MCD.P2^2, SONY.P2^2, BABA.P2^2, ATAT.P2^2),PYPL.P2)
+b
+MSE(cbind(FORD.P3,MCD.P3,SONY.P3,BABA.P3,ATAT.P3,FORD.P3^2, MCD.P3^2, SONY.P3^2, BABA.P3^2, ATAT.P3^2)[,b$`Best Features`], PYPL.P3,b$Coefficients)
+
+#5
+c <- forward_subset(cbind(FORD.P2, MCD.P2, SONY.P2, BABA.P2, ATAT.P2,FORD.P2^2, MCD.P2^2, SONY.P2^2, BABA.P2^2, ATAT.P2^2,FORD.P2^3, MCD.P2^3, SONY.P2^3, BABA.P2^3, ATAT.P2^3),PYPL.P2)
+c
+MSE(cbind(FORD.P3, MCD.P3, SONY.P3, BABA.P3, ATAT.P3,FORD.P3^2, MCD.P3^2, SONY.P3^2, BABA.P3^2, ATAT.P3^2,FORD.P3^3, MCD.P3^3, SONY.P3^3, BABA.P3^3, ATAT.P3^3)[,c$`Best Features`],PYPL.P3,c$Coefficients)
+
+#6
+
+# Our findings show that all three models were the best. When calculating
+#R-squared value and MSE, we found that adding more predictors 
+#like squares and cubes did not impact our data's relationship. For all #three models (a,b,c) we got the same four companies in all them which gave #an adjusted r-squared value of 0.8396205 and an MSE error of 16.58138. This #means that the optimal number of predictors in our model are 4 and that the #4 stocks included are good predictors of PayPal's stock price. The best #model that was calculated is indeed a good fit and the MSE error indicates #that the predicted values are relatively close to the actual values and is #good at capturing the relationship between the response and indepedent #variables. 
+```
+
+
